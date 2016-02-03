@@ -22,6 +22,7 @@ module Linkedin
     languages
     skills
     certifications
+    courses
     organizations
     past_companies
     current_companies
@@ -39,6 +40,7 @@ module Linkedin
       @linkedin_url = url
       @options = options
       @page = http_client.get(url)
+      @page.css('br').each{ |br| br.replace("\n")  }
     end
 
     def name
@@ -74,7 +76,7 @@ module Linkedin
     end
 
     def summary
-      @summary ||= (@page.at("#summary .description").text.gsub(/\s+/, " ").strip if @page.at("#summary .description"))
+      @summary ||= (@page.at("#summary .description").text.gsub(/ +/, " ").strip if @page.at("#summary .description"))
     end
 
     def picture
@@ -139,16 +141,21 @@ module Linkedin
     end
 
     def certifications
-      @certifications ||= @page.search("background-certifications").map do |item|
-        name       = item.at("h4").text.gsub(/\s+|\n/, " ").strip rescue nil
-        authority  = item.at("h5").text.gsub(/\s+|\n/, " ").strip rescue nil
+      @certifications ||= @page.search(".certifications .certification").map do |item|
+        name       = item.at(".item-title").text.gsub(/\s+|\n/, " ").strip rescue nil
+        authority  = item.at(".item-subtitle").text.gsub(/\s+|\n/, " ").strip rescue nil
         license    = item.at(".specifics/.licence-number").text.gsub(/\s+|\n/, " ").strip rescue nil
-        start_date = item.at(".certification-date").text.gsub(/\s+|\n/, " ").strip rescue nil
-
+        start_date, end_date, duration = parse_date2(item.at(".date-range").text)
         { :name => name, :authority => authority, :license => license, :start_date => start_date }
       end
     end
 
+    def courses
+      @courses ||= @page.search(".courses-list .course").map do |course|
+        name = course.text.gsub(/\s+|\n/, " ").strip rescue nil
+        { :name => name }
+      end
+    end
 
     def recommended_visitors
       @recommended_visitors ||= @page.search(".insights .browse-map/ul/li.profile-card").map do |visitor|
@@ -166,12 +173,11 @@ module Linkedin
     def projects
       @projects ||= @page.search("#projects .project").map do |project|
         p = {}
-        start_date, end_date = project.at("date-range").text.gsub(/\s+|\n/, " ").strip.split(" – ") rescue nil
+
+        p[:start_date], p[:end_date], duration = parse_date2(project.at(".meta").text)
 
         p[:title] = project.at(".item-title").text
         p[:link] =  CGI.parse(URI.parse(project.at(".item-title a")['href']).query)["url"][0] rescue nil
-        p[:start_date] = parse_date(start_date) rescue nil
-        p[:end_date] = parse_date(end_date)  rescue nil
         p[:description] = project.at(".description").text rescue nil
         p[:associates] = project.search(".contributors .contributor").map{ |c| c.at("a").text } rescue nil
         p
@@ -196,16 +202,18 @@ module Linkedin
         company = {}
         company[:title] = node.at(".item-title").text.gsub(/\s+|\n/, " ").strip if node.at(".item-title")
         company[:company] = node.at(".item-subtitle").text.gsub(/\s+|\n/, " ").strip if node.at(".item-subtitle")
-        company[:description] = node.at(".description").text.gsub(/\s+|\n/, " ").strip if node.at(".description")
+        company[:description] = node.at(".description").text.gsub(/ +/, " ").strip if node.at(".description")
 
-        start_date, end_date = node.at(".meta").text.strip.split(" – ") rescue nil
-        company[:duration] = node.at(".meta").text[/.*\((.*)\)/, 1]
-        company[:start_date] = parse_date(start_date) rescue nil
-        if end_date && end_date.match(/Present/)
-          company[:end_date] = "Present"
-        else
-          company[:start_date] = parse_date(end_date) rescue nil
-        end
+        company[:start_date], company[:end_date], company[:duration] = 
+            parse_date2(node.at(".meta").text)
+        # start_date, end_date = node.at(".meta").text.strip.split(" – ") rescue nil
+        # company[:duration] = node.at(".meta").text[/.*\((.*)\)/, 1]
+        # company[:start_date] = parse_date(start_date) rescue nil
+        # if end_date && end_date.match(/Present/)
+        #   company[:end_date] = "Present"
+        # else
+        #   company[:start_date] = parse_date(end_date) rescue nil
+        # end
 
         company_link = node.at(".item-subtitle").at("a")["href"] rescue nil
         if company_link
@@ -222,6 +230,17 @@ module Linkedin
     def parse_date(date)
       date = "#{date}-01-01" if date =~ /^(19|20)\d{2}$/
       Date.parse(date)
+    end
+
+    def parse_date2(date)
+      date[/(^Starting )*/] = ''
+      if date.match /(.*) \((.*)\)/
+          date = $1
+          duration = $2
+      end
+      start_date, end_date = date.split(" – ")
+      end_date = (end_date =~ /^present/i) ? 'Present' : parse_date(end_date) if !end_date.nil?
+      [parse_date(start_date), end_date, duration]
     end
 
     def get_company_details(link)
