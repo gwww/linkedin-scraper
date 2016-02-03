@@ -22,6 +22,7 @@ module Linkedin
     languages
     skills
     certifications
+    publications
     courses
     organizations
     past_companies
@@ -147,6 +148,16 @@ module Linkedin
         license    = item.at(".specifics/.licence-number").text.gsub(/\s+|\n/, " ").strip rescue nil
         start_date, end_date, duration = parse_date2(item.at(".date-range").text)
         { :name => name, :authority => authority, :license => license, :start_date => start_date }
+      end
+    end
+
+    def publications
+      @publications ||= @page.search("#publications .publication").map do |item|
+        name = item.at(".item-title").text.gsub(/\s+|\n/, " ").strip rescue nil
+        publication = item.at(".item-subtitle").text.gsub(/\s+|\n/, " ").strip rescue nil
+        description = item.at(".description").text.gsub(/\s+|\n/, " ").strip rescue nil
+        start_date, end_date, duration = parse_date2(item.at(".date-range").text)
+        { :name => name, :publication => publication, :description => description, :start_date => start_date }
       end
     end
 
