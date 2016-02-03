@@ -1,4 +1,3 @@
-require "rubygems"
 require "mechanize"
 require "cgi"
 require "net/http"
