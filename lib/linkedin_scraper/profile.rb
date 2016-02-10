@@ -259,11 +259,12 @@ module Linkedin
       @companies
     end
 
-    def get_company_details(link)
-      result = { :linkedin_company_url => get_linkedin_company_url(link) }
-      page = http_client.get(result[:linkedin_company_url])
+    def get_company_details(_link)
+      link = _link.match(/^https?:\/\//) ? _link : "https://www.linkedin.com/#{_link}"
+      result = {linkedin_company_url: link}
+      page = http_client.get(link)
+      result[:url] = get_text(page,'.basic-info-about/ul/li/p/a')
 
-      result[:url] = page.at(".basic-info-about/ul/li/p/a").text if page.at(".basic-info-about/ul/li/p/a")
       node_2 = page.at(".basic-info-about/ul")
       if node_2
         node_2.search("p").zip(node_2.search("h4")).each do |value, title|
@@ -284,14 +285,14 @@ module Linkedin
       end
     end
 
-    def get_linkedin_company_url(link)
-      http = %r{http://www.linkedin.com/}
-      https = %r{https://www.linkedin.com/}
-      if http.match(link) || https.match(link)
-        link
-      else
-        "https://www.linkedin.com/#{link}"
-      end
-    end
+    # def get_linkedin_company_url(link)
+    #   http = %r{http://www.linkedin.com/}
+    #   https = %r{https://www.linkedin.com/}
+    #   if http.match(link) || https.match(link)
+    #     link
+    #   else
+    #     "https://www.linkedin.com/#{link}"
+    #   end
+    # end
   end
 end
