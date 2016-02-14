@@ -284,15 +284,5 @@ module Linkedin
         agent.max_history = 0
       end
     end
-
-    # def get_linkedin_company_url(link)
-    #   http = %r{http://www.linkedin.com/}
-    #   https = %r{https://www.linkedin.com/}
-    #   if http.match(link) || https.match(link)
-    #     link
-    #   else
-    #     "https://www.linkedin.com/#{link}"
-    #   end
-    # end
   end
 end
