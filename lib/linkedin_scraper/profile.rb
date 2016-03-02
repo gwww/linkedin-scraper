@@ -85,7 +85,9 @@ module Linkedin
     end
 
     def skills
-      @skills ||= (@page.search(".pills .skill").map { |skill| skill.text.strip if skill.text } rescue nil)
+      @skills ||= @page.search(".pills .skill").map do |skill| 
+        skill.text.strip
+      end
     end
 
     def past_companies
@@ -150,8 +152,7 @@ module Linkedin
         cert[:name] = get_text(item,'.item-title')
         cert[:authority] = get_text(item,'.item-subtitle')
         cert[:license] = get_text(item, '.specifics/.licence-number')
-        cert[:start_date], end_date, duration = parse_date3(
-          get_text(item,'.date-range'))
+        cert[:start_date] = parse_date3(get_text(item,'.date-range'))[0]
         cert
       end
     end
@@ -162,8 +163,7 @@ module Linkedin
         pub[:name] = get_text(item,'.item-title')
         pub[:publication] = get_text(item,'.item-subtitle')
         pub[:description] = get_text(item,'.description',:nojoin)
-        pub[:start_date], end_date, duration = parse_date3(
-          get_text(item,'.date-range'))
+        pub[:start_date] = parse_date3(get_text(item,'.date-range'))[0]
         pub
       end
     end
@@ -209,8 +209,47 @@ module Linkedin
 
     private
 
+    def get_companies()
+      return @companies if @companies
+
+      @companies = []
+      @page.search(".positions .position").each do |node|
+        company = {}
+        company[:title] = get_text(node,'.item-title')
+        company[:company] = get_text(node,'.item-subtitle')
+        company[:description] = get_text(node,'.description',:nojoin)
+        company[:start_date], company[:end_date], company[:duration] = 
+            parse_date3(node.at(".meta").text)
+
+        eompany_link = node.at(".item-subtitle").at("a")["href"] rescue nil
+        if company_link
+          result = get_company_details(company_link)
+          @companies << company.merge!(result)
+        else
+          @companies << company
+        end
+      end
+      @companies
+    end
+
+    def get_company_details(_link)
+      link = _link.match(/^https?:\/\//) ? _link : "https://www.linkedin.com/#{_link}"
+      result = {linkedin_company_url: link}
+      page = http_client.get(link)
+      result[:url] = get_text(page,'.basic-info-about/ul/li/p/a')
+
+      node_2 = page.at(".basic-info-about/ul")
+      if node_2
+        node_2.search("p").zip(node_2.search("h4")).each do |value, title|
+          result[title.text.gsub(" ", "_").downcase.to_sym] = value.text.strip
+        end
+      end
+      result[:address] = page.at(".vcard.hq").at(".adr").text.gsub("\n", " ").strip if page.at(".vcard.hq")
+      result
+    end
+
     def get_text( container, selector, join_lines=:join )
-      regex = join_lines == :join ? %r{\s+} : %r{ +}
+      regex = (join_lines == :join) ? %r{\s+} : %r{ +}
       element = selector.to_s.length > 0 ? container.at(selector) : container
       element ? element.text.gsub(regex, ' ').strip : ''
     end
@@ -231,55 +270,12 @@ module Linkedin
       [parse_date(start_date), end_date, duration]
     end
 
-    #TODO Bad code Hot fix
-    def get_companies()
-      if @companies
-        return @companies
-      else
-        @companies = []
-      end
-
-      @page.search(".positions .position").each do |node|
-        company = {}
-        company[:title] = get_text(node,'.item-title')
-        company[:company] = get_text(node,'.item-subtitle')
-        company[:description] = get_text(node,'.description',:nojoin)
-        company[:start_date], company[:end_date], company[:duration] = 
-            parse_date3(node.at(".meta").text)
-
-        company_link = node.at(".item-subtitle").at("a")["href"] rescue nil
-        if company_link
-          result = get_company_details(company_link)
-          @companies << company.merge!(result)
-        else
-          @companies << company
-        end
-      end
-
-      @companies
-    end
-
-    def get_company_details(_link)
-      link = _link.match(/^https?:\/\//) ? _link : "https://www.linkedin.com/#{_link}"
-      result = {linkedin_company_url: link}
-      page = http_client.get(link)
-      result[:url] = get_text(page,'.basic-info-about/ul/li/p/a')
-
-      node_2 = page.at(".basic-info-about/ul")
-      if node_2
-        node_2.search("p").zip(node_2.search("h4")).each do |value, title|
-          result[title.text.gsub(" ", "_").downcase.to_sym] = value.text.strip
-        end
-      end
-      result[:address] = page.at(".vcard.hq").at(".adr").text.gsub("\n", " ").strip if page.at(".vcard.hq")
-      result
-    end
-
     def http_client
       Mechanize.new do |agent|
         agent.user_agent_alias = USER_AGENTS.sample
         unless @options.empty?
-          agent.set_proxy(@options[:proxy_ip], @options[:proxy_port], @options[:username], @options[:password])
+          agent.set_proxy(@options[:proxy_ip], @options[:proxy_port], 
+                          @options[:username], @options[:password])
         end
         agent.max_history = 0
       end
